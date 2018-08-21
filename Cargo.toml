@@ -1,0 +1,14 @@
+[package]
+name = "lambstock"
+version = "0.1.0"
+authors = ["softprops <d.tangren@gmail.com>"]
+
+[dependencies]
+rusoto_resourcegroupstaggingapi = "0.33"
+rusoto_lambda = "0.33"
+futures = "0.1"
+tokio = "0.1"
+lazy_static = "1.1"
+failure = "0.1"
+structopt = "0.2"
+humansize  = "1.1"
