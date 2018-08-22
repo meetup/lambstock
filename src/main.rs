@@ -12,21 +12,22 @@ extern crate failure;
 extern crate structopt;
 extern crate humansize;
 
+// Std lib
+use std::collections::{BTreeSet, HashMap};
+
+// Third party
 use futures::future::{self, Future};
 use futures::sync::oneshot::spawn;
 use humansize::{file_size_opts as options, FileSize};
-use std::collections::{HashMap, HashSet};
-use structopt::StructOpt;
-use tokio::runtime::Runtime;
-
-use rusoto_resourcegroupstaggingapi::{
-    GetResourcesError, GetResourcesInput, GetTagKeysInput, ResourceGroupsTaggingApi,
-    ResourceGroupsTaggingApiClient, ResourceTagMapping, Tag,
-};
-
 use rusoto_lambda::{
     FunctionConfiguration, Lambda, LambdaClient, ListFunctionsError, ListFunctionsRequest,
 };
+use rusoto_resourcegroupstaggingapi::{
+    GetResourcesError, GetResourcesInput, ResourceGroupsTaggingApi, ResourceGroupsTaggingApiClient,
+    ResourceTagMapping, Tag,
+};
+use structopt::StructOpt;
+use tokio::runtime::Runtime;
 
 lazy_static! {
     static ref FALLBACK_RUNTIME: Runtime = Runtime::new().unwrap();
@@ -146,15 +147,12 @@ fn main() -> Result<(), Error> {
                 Default::default(),
             ).map_err(Error::from);
             let names = tags.map(|mappings| {
-                let unsorted = mappings.iter().fold(HashSet::new(), |mut names, mapping| {
+                mappings.iter().fold(BTreeSet::new(), |mut names, mapping| {
                     for tag in mapping.tags.clone().unwrap_or_default() {
                         names.insert(tag.key.clone());
                     }
                     names
-                });
-                let mut sorted: Vec<String> = unsorted.into_iter().collect();
-                sorted.sort();
-                sorted
+                })
             });
             Ok(println!(
                 "{:#?}",
