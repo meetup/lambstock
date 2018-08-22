@@ -24,13 +24,13 @@ use rusoto_lambda::{
 };
 use rusoto_resourcegroupstaggingapi::{
     GetResourcesError, GetResourcesInput, ResourceGroupsTaggingApi, ResourceGroupsTaggingApiClient,
-    ResourceTagMapping, Tag,
+    ResourceTagMapping, Tag, TagFilter,
 };
 use structopt::StructOpt;
 use tokio::runtime::Runtime;
 
 lazy_static! {
-    static ref FALLBACK_RUNTIME: Runtime = Runtime::new().unwrap();
+    static ref FALLBACK_RUNTIME: Runtime = Runtime::new().expect("failed to create runtime");
 }
 
 /// Failure types
@@ -54,18 +54,34 @@ impl From<GetResourcesError> for Error {
     }
 }
 
+fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<std::error::Error>>
+where
+    T: std::str::FromStr,
+    T::Err: std::error::Error + 'static,
+    U: std::str::FromStr,
+    U::Err: std::error::Error + 'static,
+{
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid KEY=value: no `=` found in `{}`", s))?;
+    Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
+}
+
 /// CLI options
 #[derive(StructOpt, PartialEq, Debug)]
 #[structopt(name = "lambstock", about = "stock management for your AWS lambda")]
 enum Options {
     #[structopt(name = "list", alias = "ls", about = "Lists lambdas")]
-    List,
+    List {
+        #[structopt(short = "t", long = "tag", parse(try_from_str = "parse_key_val"))]
+        tags: Vec<(String, String)>,
+    },
     #[structopt(name = "tags", about = "Lists lambdas tags")]
     Tags,
 }
 
 /// A single lambda function with associated tags
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Func {
     config: FunctionConfiguration,
     tags: Vec<Tag>,
@@ -80,6 +96,16 @@ impl Func {
             .file_size(options::CONVENTIONAL)
             .unwrap_or_default()
     }
+}
+
+fn filters(tags: Vec<(String, String)>) -> Vec<TagFilter> {
+    tags.iter().fold(Vec::new(), |mut filters, (k, v)| {
+        filters.push(TagFilter {
+            key: Some(k.to_owned()),
+            values: Some(vec![v.to_owned()]),
+        });
+        filters
+    })
 }
 
 fn lambdas(
@@ -112,6 +138,7 @@ fn lambdas(
 fn tag_mappings(
     client: ResourceGroupsTaggingApiClient,
     pagination_token: Option<String>,
+    tag_filters: Option<Vec<TagFilter>>,
 ) -> Box<Future<Item = Vec<ResourceTagMapping>, Error = GetResourcesError> + Send> {
     Box::new(
         client
@@ -119,18 +146,21 @@ fn tag_mappings(
                 resource_type_filters: Some(vec!["lambda:function".into()]),
                 resources_per_page: Some(50),
                 pagination_token,
+                tag_filters: tag_filters.clone(),
                 ..Default::default()
             })
             .and_then(move |result| {
                 if let Some(token) = result.pagination_token.clone().filter(|s| !s.is_empty()) {
-                    return future::Either::A(tag_mappings(client, Some(token)).map(|next| {
-                        result
-                            .resource_tag_mapping_list
-                            .unwrap_or_default()
-                            .into_iter()
-                            .chain(next)
-                            .collect()
-                    }));
+                    return future::Either::A(tag_mappings(client, Some(token), tag_filters).map(
+                        |next| {
+                            result
+                                .resource_tag_mapping_list
+                                .unwrap_or_default()
+                                .into_iter()
+                                .chain(next)
+                                .collect()
+                        },
+                    ));
                 }
                 future::Either::B(future::ok(
                     result.resource_tag_mapping_list.unwrap_or_default(),
@@ -139,12 +169,24 @@ fn tag_mappings(
     )
 }
 
+fn render(funcs: Vec<Func>) {
+    for func in funcs {
+        println!(
+            "{} {} {}",
+            func.config.function_name.as_ref().unwrap(),
+            func.config.runtime.as_ref().unwrap(),
+            func.human_size()
+        )
+    }
+}
+
 fn main() -> Result<(), Error> {
     match Options::from_args() {
         Options::Tags => {
             let tags = tag_mappings(
                 ResourceGroupsTaggingApiClient::new(Default::default()),
                 Default::default(),
+                None,
             ).map_err(Error::from);
             let names = tags.map(|mappings| {
                 mappings.iter().fold(BTreeSet::new(), |mut names, mapping| {
@@ -159,14 +201,15 @@ fn main() -> Result<(), Error> {
                 spawn(names, &FALLBACK_RUNTIME.executor()).wait()?
             ))
         }
-        Options::List => {
-            let tags = tag_mappings(
+        Options::List { tags } => {
+            let tag_mappings = tag_mappings(
                 ResourceGroupsTaggingApiClient::new(Default::default()),
                 Default::default(),
+                Some(filters(tags)),
             ).map_err(Error::from);
             let lambdas = lambdas(LambdaClient::new(Default::default()), Default::default())
                 .map_err(Error::from);
-            let filtered = tags.join(lambdas).map(|(tags, lambdas)| {
+            let filtered = tag_mappings.join(lambdas).map(|(tags, lambdas)| {
                 let lookup: HashMap<String, FunctionConfiguration> = lambdas
                     .into_iter()
                     .map(|config| (config.function_arn.clone().unwrap_or_default(), config))
@@ -181,10 +224,36 @@ fn main() -> Result<(), Error> {
                     result
                 })
             });
-            Ok(println!(
-                "{:#?}",
-                spawn(filtered, &FALLBACK_RUNTIME.executor()).wait()?
-            ))
+            Ok(spawn(filtered.map(render), &FALLBACK_RUNTIME.executor()).wait()?)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{filters, Func, FunctionConfiguration, TagFilter};
+    #[test]
+    fn func_human_size() {
+        assert_eq!(
+            "1 KB",
+            Func {
+                config: FunctionConfiguration {
+                    code_size: Some(1024),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }.human_size()
+        )
+    }
+    #[test]
+    fn cli_tags_to_filters() {
+        let filters = filters(vec![("foo".into(), "bar".into())]);
+        assert_eq!(
+            filters,
+            vec![TagFilter {
+                key: Some("foo".into()),
+                values: Some(vec!["bar".into()]),
+            }]
+        )
     }
 }

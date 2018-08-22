@@ -1,0 +1,83 @@
+# lifted release strategy from https://raw.githubusercontent.com/rustwasm/wasm-pack/master/.travis.yml
+language: rust
+sudo: required
+
+cache:
+  cargo: true
+  apt: true
+
+env:
+  global:
+    - CRATE_NAME=lambstock
+    - ARCH=x86_64
+    - OS=Linux
+
+matrix:
+  include:
+
+  # tests pass
+  - script:
+    # --locked => Require Cargo.lock is up to date
+    - cargo test --locked
+    - rustup component add rustfmt-preview
+    - cargo fmt --all -- --write-mode check
+    env: RUST_BACKTRACE=1
+
+  # dist linux binary
+  - env: TARGET=x86_64-unknown-linux-musl DEPLOY=1
+    before_script:
+      - rustup target add $TARGET
+      - curl https://www.openssl.org/source/openssl-1.0.2l.tar.gz | tar xzf -
+      - (cd openssl-1.0.2l &&
+        CC=musl-gcc ./Configure --prefix=$HOME/openssl-musl no-dso no-ssl2 no-ssl3 linux-x86_64 -fPIC &&
+        make -j$(nproc) &&
+        make install)
+      - export OPENSSL_DIR=$HOME/openssl-musl
+    script: cargo build --release --target $TARGET --locked
+
+  # dist OSX binary
+  - os: osx
+    env: MACOSX_DEPLOYMENT_TARGET=10.7 TARGET=x86_64-apple-darwin OS=Darwin DEPLOY=1
+    script: cargo build --release --target $TARGET --locked
+    install: true
+
+addons:
+  apt:
+    packages:
+    - musl-tools
+    # required by tarpaulin code coverage tool
+    - libssl-dev
+
+install: |
+  if [[ "$TRAVIS_RUST_VERSION" == stable ]] && [[ $(cargo tarpaulin --version) != *0.6.2 ]]; then
+    `RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install  --force --version 0.6.2  cargo-tarpaulin`
+  fi
+after_success:
+  # report coverage to coveralls
+  # see https://github.com/xd009642/tarpaulin for more information
+  - '[ $TRAVIS_EVENT_TYPE != "cron" ] &&
+    [ $TRAVIS_RUST_VERSION = stable ] &&
+    [ $TRAVIS_BRANCH = master ] &&
+    [ $TRAVIS_PULL_REQUEST = false ] &&
+    cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID || true'
+
+before_deploy:
+- name="$CRATE_NAME-$TRAVIS_TAG-$OS-$ARCH"
+- src=$(pwd)
+- mkdir $name
+- strip target/$TARGET/release/$CRATE_NAME
+- cp target/$TARGET/release/$CRATE_NAME $name/
+- cd $name
+- tar czvf $src/$name.tar.gz *
+- cd $src
+- rm -rf $name
+
+# deploy:
+#   provider: releases
+#   file_glob: true
+#   file: $CRATE_NAME-$TRAVIS_TAG-$OS-$ARCH.tar.gz
+#   api_key: $GH_TOKEN
+#   skip_cleanup: true
+#   on:
+#     condition: $TRAVIS_RUST_VERSION = stable && $DEPLOY = 1
+#     tags: true
