@@ -14,6 +14,8 @@ extern crate humansize;
 
 // Std lib
 use std::collections::{BTreeSet, HashMap};
+use std::error::Error as StdError;
+use std::str::FromStr;
 
 // Third party
 use futures::future::{self, Future};
@@ -29,37 +31,19 @@ use rusoto_resourcegroupstaggingapi::{
 use structopt::StructOpt;
 use tokio::runtime::Runtime;
 
+mod error;
+use error::Error;
+
 lazy_static! {
     static ref FALLBACK_RUNTIME: Runtime = Runtime::new().expect("failed to create runtime");
 }
 
-/// Failure types
-#[derive(Fail, Debug)]
-pub enum Error {
-    #[fail(display = "{}", _0)]
-    Listing(#[cause] ListFunctionsError),
-    #[fail(display = "{}", _0)]
-    Tags(#[cause] GetResourcesError),
-}
-
-impl From<ListFunctionsError> for Error {
-    fn from(err: ListFunctionsError) -> Self {
-        Error::Listing(err)
-    }
-}
-
-impl From<GetResourcesError> for Error {
-    fn from(err: GetResourcesError) -> Self {
-        Error::Tags(err)
-    }
-}
-
-fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<std::error::Error>>
+fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<StdError>>
 where
-    T: std::str::FromStr,
-    T::Err: std::error::Error + 'static,
-    U: std::str::FromStr,
-    U::Err: std::error::Error + 'static,
+    T: FromStr,
+    T::Err: StdError + 'static,
+    U: FromStr,
+    U::Err: StdError + 'static,
 {
     let pos = s
         .find('=')
