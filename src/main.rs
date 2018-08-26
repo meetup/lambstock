@@ -99,10 +99,10 @@ impl Func {
 }
 
 fn filters(tags: Vec<(String, String)>) -> Vec<TagFilter> {
-    tags.iter().fold(Vec::new(), |mut filters, (k, v)| {
+    tags.into_iter().fold(Vec::new(), |mut filters, (k, v)| {
         filters.push(TagFilter {
-            key: Some(k.to_owned()),
-            values: Some(vec![v.to_owned()]),
+            key: Some(k),
+            values: Some(vec![v]),
         });
         filters
     })
