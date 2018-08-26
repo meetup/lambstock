@@ -2,6 +2,14 @@
 name = "lambstock"
 version = "0.1.0"
 authors = ["softprops <d.tangren@gmail.com>"]
+description = "A command line interface for browsing AWS lambdas"
+documentation = "https://github.com/meetup/lambstock"
+homepage = "https://github.com/meetup/lambstock"
+repository = "https://github.com/meetup/lambstock"
+keywords = ["aws", "lambda", "serverless"]
+license = "MIT"
+categories = ["command-line-utilities"]
+readme = "README.md"
 
 [dependencies]
 failure = "0.1"
