@@ -21,11 +21,13 @@ use std::str::FromStr;
 use futures::future::{self, Future};
 use futures::sync::oneshot::spawn;
 use humansize::{file_size_opts as options, FileSize};
-use rusoto_lambda::{FunctionConfiguration, Lambda, LambdaClient, ListFunctionsError,
-                    ListFunctionsRequest};
-use rusoto_resourcegroupstaggingapi::{GetResourcesError, GetResourcesInput,
-                                      ResourceGroupsTaggingApi, ResourceGroupsTaggingApiClient,
-                                      ResourceTagMapping, Tag, TagFilter};
+use rusoto_lambda::{
+    FunctionConfiguration, Lambda, LambdaClient, ListFunctionsError, ListFunctionsRequest,
+};
+use rusoto_resourcegroupstaggingapi::{
+    GetResourcesError, GetResourcesInput, ResourceGroupsTaggingApi, ResourceGroupsTaggingApiClient,
+    ResourceTagMapping, Tag, TagFilter,
+};
 use structopt::StructOpt;
 use tokio::runtime::Runtime;
 
@@ -43,9 +45,9 @@ where
     U: FromStr,
     U::Err: StdError + 'static,
 {
-    let pos = s.find('=').ok_or_else(|| {
-        format!("invalid KEY=value: no `=` found in `{}`", s)
-    })?;
+    let pos = s
+        .find('=')
+        .ok_or_else(|| format!("invalid KEY=value: no `=` found in `{}`", s))?;
     Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
 }
 
@@ -133,16 +135,16 @@ fn tag_mappings(
             })
             .and_then(move |result| {
                 if let Some(token) = result.pagination_token.clone().filter(|s| !s.is_empty()) {
-                    return future::Either::A(
-                        tag_mappings(client, Some(token), tag_filters).map(|next| {
+                    return future::Either::A(tag_mappings(client, Some(token), tag_filters).map(
+                        |next| {
                             result
                                 .resource_tag_mapping_list
                                 .unwrap_or_default()
                                 .into_iter()
                                 .chain(next)
                                 .collect()
-                        }),
-                    );
+                        },
+                    ));
                 }
                 future::Either::B(future::ok(
                     result.resource_tag_mapping_list.unwrap_or_default(),
@@ -194,9 +196,7 @@ fn main() -> Result<(), Error> {
             let filtered = tag_mappings.join(lambdas).map(|(tags, lambdas)| {
                 let lookup: HashMap<String, FunctionConfiguration> = lambdas
                     .into_iter()
-                    .map(|config| {
-                        (config.function_arn.clone().unwrap_or_default(), config)
-                    })
+                    .map(|config| (config.function_arn.clone().unwrap_or_default(), config))
                     .collect();
                 tags.into_iter().fold(Vec::new(), |mut result, mapping| {
                     if let Some(config) = lookup.get(&mapping.resource_arn.unwrap_or_default()) {
@@ -208,8 +208,7 @@ fn main() -> Result<(), Error> {
                     result
                 })
             });
-            Ok(spawn(filtered.map(render), &FALLBACK_RUNTIME.executor())
-                .wait()?)
+            Ok(spawn(filtered.map(render), &FALLBACK_RUNTIME.executor()).wait()?)
         }
     }
 }
@@ -235,12 +234,10 @@ mod tests {
         let filters = filters(vec![("foo".into(), "bar".into())]);
         assert_eq!(
             filters,
-            vec![
-                TagFilter {
-                    key: Some("foo".into()),
-                    values: Some(vec!["bar".into()]),
-                },
-            ]
+            vec![TagFilter {
+                key: Some("foo".into()),
+                values: Some(vec!["bar".into()]),
+            }]
         )
     }
 }

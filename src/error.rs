@@ -5,15 +5,9 @@ use rusoto_resourcegroupstaggingapi::GetResourcesError;
 #[derive(Fail, Debug)]
 pub enum Error {
     #[fail(display = "{}", _0)]
-    Listing(
-        #[cause]
-        ListFunctionsError
-    ),
+    Listing(#[cause] ListFunctionsError),
     #[fail(display = "{}", _0)]
-    Tags(
-        #[cause]
-        GetResourcesError
-    ),
+    Tags(#[cause] GetResourcesError),
 }
 
 impl From<ListFunctionsError> for Error {
