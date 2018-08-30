@@ -13,6 +13,8 @@ extern crate structopt;
 extern crate humansize;
 extern crate rusoto_core;
 extern crate rusoto_credential;
+#[macro_use]
+extern crate clap;
 
 // Std lib
 use std::collections::{BTreeSet, HashMap};
@@ -57,6 +59,21 @@ where
     Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
 }
 
+arg_enum! {
+    #[derive(Debug, PartialEq)]
+    enum Sort {
+        Name,
+        Runtime,
+        CodeSize,
+    }
+}
+
+impl Default for Sort {
+    fn default() -> Self {
+        Sort::Name
+    }
+}
+
 /// CLI options
 #[derive(StructOpt, PartialEq, Debug)]
 #[structopt(name = "lambstock", about = "stock management for your AWS lambda")]
@@ -65,6 +82,13 @@ enum Options {
     List {
         #[structopt(short = "t", long = "tag", parse(try_from_str = "parse_key_val"))]
         tags: Vec<(String, String)>,
+        #[structopt(
+            short = "s",
+            long = "sort",
+            default_value = "name",
+            raw(possible_values = "&Sort::variants()", case_insensitive = "true")
+        )]
+        sort: Sort,
     },
     #[structopt(name = "tags", about = "List lambdas tags")]
     Tags,
@@ -80,11 +104,22 @@ struct Func {
 impl Func {
     /// Return size of function for human display
     fn human_size(&self) -> String {
-        self.config
-            .code_size
+        self.code_size()
             .unwrap_or_default()
             .file_size(options::CONVENTIONAL)
             .unwrap_or_default()
+    }
+
+    fn name(&self) -> Option<String> {
+        self.config.function_name.clone()
+    }
+
+    fn runtime(&self) -> Option<String> {
+        self.config.runtime.clone()
+    }
+
+    fn code_size(&self) -> Option<i64> {
+        self.config.code_size.clone()
     }
 }
 
@@ -159,7 +194,21 @@ fn tag_mappings(
     )
 }
 
-fn render_funcs(funcs: Vec<Func>) {
+fn render_funcs(funcs: &mut Vec<Func>, sort: Sort) {
+    funcs.sort_unstable_by(|a, b| match sort {
+        Sort::Name => a
+            .name()
+            .unwrap_or_default()
+            .cmp(&b.name().unwrap_or_default()),
+        Sort::CodeSize => a
+            .code_size()
+            .unwrap_or_default()
+            .cmp(&b.code_size().unwrap_or_default()),
+        Sort::Runtime => a
+            .runtime()
+            .unwrap_or_default()
+            .cmp(&b.runtime().unwrap_or_default()),
+    });
     for func in funcs {
         println!(
             "{} {} {}",
@@ -212,7 +261,7 @@ fn main() -> Result<(), Error> {
             });
             Ok(spawn(names.map(render_tags), &FALLBACK_RUNTIME.executor()).wait()?)
         }
-        Options::List { tags } => {
+        Options::List { tags, sort } => {
             let tag_mappings = tag_mappings(tags_client(), Default::default(), Some(filters(tags)))
                 .map_err(Error::from);
 
@@ -232,7 +281,10 @@ fn main() -> Result<(), Error> {
                     result
                 })
             });
-            Ok(spawn(filtered.map(render_funcs), &FALLBACK_RUNTIME.executor()).wait()?)
+            Ok(spawn(
+                filtered.map(|mut funcs| render_funcs(&mut funcs, sort)),
+                &FALLBACK_RUNTIME.executor(),
+            ).wait()?)
         }
     }
 }

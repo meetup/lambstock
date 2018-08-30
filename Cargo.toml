@@ -12,6 +12,7 @@ categories = ["command-line-utilities"]
 readme = "README.md"
 
 [dependencies]
+clap = "2.32"
 failure = "0.1"
 futures = "0.1"
 humansize  = "1.1"
