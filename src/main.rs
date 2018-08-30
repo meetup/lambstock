@@ -159,7 +159,7 @@ fn tag_mappings(
     )
 }
 
-fn render(funcs: Vec<Func>) {
+fn render_funcs(funcs: Vec<Func>) {
     for func in funcs {
         println!(
             "{} {} {}",
@@ -167,6 +167,12 @@ fn render(funcs: Vec<Func>) {
             func.config.runtime.as_ref().unwrap(),
             func.human_size()
         )
+    }
+}
+
+fn render_tags(tags: BTreeSet<String>) {
+    for tag in tags {
+        println!("{}", tag)
     }
 }
 
@@ -204,10 +210,7 @@ fn main() -> Result<(), Error> {
                     names
                 })
             });
-            Ok(println!(
-                "{:#?}",
-                spawn(names, &FALLBACK_RUNTIME.executor()).wait()?
-            ))
+            Ok(spawn(names.map(render_tags), &FALLBACK_RUNTIME.executor()).wait()?)
         }
         Options::List { tags } => {
             let tag_mappings = tag_mappings(tags_client(), Default::default(), Some(filters(tags)))
@@ -229,7 +232,7 @@ fn main() -> Result<(), Error> {
                     result
                 })
             });
-            Ok(spawn(filtered.map(render), &FALLBACK_RUNTIME.executor()).wait()?)
+            Ok(spawn(filtered.map(render_funcs), &FALLBACK_RUNTIME.executor()).wait()?)
         }
     }
 }
