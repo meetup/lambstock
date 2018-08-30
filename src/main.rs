@@ -11,16 +11,22 @@ extern crate failure;
 #[macro_use]
 extern crate structopt;
 extern crate humansize;
+extern crate rusoto_core;
+extern crate rusoto_credential;
 
 // Std lib
 use std::collections::{BTreeSet, HashMap};
 use std::error::Error as StdError;
 use std::str::FromStr;
+use std::time::Duration;
 
 // Third party
 use futures::future::{self, Future};
 use futures::sync::oneshot::spawn;
 use humansize::{file_size_opts as options, FileSize};
+
+use rusoto_core::request::HttpClient;
+use rusoto_credential::ChainProvider;
 use rusoto_lambda::{
     FunctionConfiguration, Lambda, LambdaClient, ListFunctionsError, ListFunctionsRequest,
 };
@@ -55,12 +61,12 @@ where
 #[derive(StructOpt, PartialEq, Debug)]
 #[structopt(name = "lambstock", about = "stock management for your AWS lambda")]
 enum Options {
-    #[structopt(name = "list", alias = "ls", about = "Lists lambdas")]
+    #[structopt(name = "list", alias = "ls", about = "List lambdas")]
     List {
         #[structopt(short = "t", long = "tag", parse(try_from_str = "parse_key_val"))]
         tags: Vec<(String, String)>,
     },
-    #[structopt(name = "tags", about = "Lists lambdas tags")]
+    #[structopt(name = "tags", about = "List lambdas tags")]
     Tags,
 }
 
@@ -164,11 +170,21 @@ fn render(funcs: Vec<Func>) {
     }
 }
 
+fn credentials() -> ChainProvider {
+    let mut chain = ChainProvider::new();
+    chain.set_timeout(Duration::from_millis(200));
+    chain
+}
+
 fn main() -> Result<(), Error> {
     match Options::from_args() {
         Options::Tags => {
             let tags = tag_mappings(
-                ResourceGroupsTaggingApiClient::new(Default::default()),
+                ResourceGroupsTaggingApiClient::new_with(
+                    HttpClient::new().expect("failed to create request dispatcher"),
+                    credentials(),
+                    Default::default(),
+                ),
                 Default::default(),
                 None,
             ).map_err(Error::from);
@@ -187,12 +203,23 @@ fn main() -> Result<(), Error> {
         }
         Options::List { tags } => {
             let tag_mappings = tag_mappings(
-                ResourceGroupsTaggingApiClient::new(Default::default()),
+                ResourceGroupsTaggingApiClient::new_with(
+                    HttpClient::new().expect("failed to create request dispatcher"),
+                    credentials(),
+                    Default::default(),
+                ),
                 Default::default(),
                 Some(filters(tags)),
             ).map_err(Error::from);
-            let lambdas = lambdas(LambdaClient::new(Default::default()), Default::default())
-                .map_err(Error::from);
+
+            let lambdas = lambdas(
+                LambdaClient::new_with(
+                    HttpClient::new().expect("failed to create request dispatcher"),
+                    credentials(),
+                    Default::default(),
+                ),
+                Default::default(),
+            ).map_err(Error::from);
             let filtered = tag_mappings.join(lambdas).map(|(tags, lambdas)| {
                 let lookup: HashMap<String, FunctionConfiguration> = lambdas
                     .into_iter()
