@@ -176,18 +176,26 @@ fn credentials() -> ChainProvider {
     chain
 }
 
+fn lambda_client() -> LambdaClient {
+    LambdaClient::new_with(
+        HttpClient::new().expect("failed to create request dispatcher"),
+        credentials(),
+        Default::default(),
+    )
+}
+
+fn tags_client() -> ResourceGroupsTaggingApiClient {
+    ResourceGroupsTaggingApiClient::new_with(
+        HttpClient::new().expect("failed to create request dispatcher"),
+        credentials(),
+        Default::default(),
+    )
+}
+
 fn main() -> Result<(), Error> {
     match Options::from_args() {
         Options::Tags => {
-            let tags = tag_mappings(
-                ResourceGroupsTaggingApiClient::new_with(
-                    HttpClient::new().expect("failed to create request dispatcher"),
-                    credentials(),
-                    Default::default(),
-                ),
-                Default::default(),
-                None,
-            ).map_err(Error::from);
+            let tags = tag_mappings(tags_client(), Default::default(), None).map_err(Error::from);
             let names = tags.map(|mappings| {
                 mappings.iter().fold(BTreeSet::new(), |mut names, mapping| {
                     for tag in mapping.tags.clone().unwrap_or_default() {
@@ -202,24 +210,10 @@ fn main() -> Result<(), Error> {
             ))
         }
         Options::List { tags } => {
-            let tag_mappings = tag_mappings(
-                ResourceGroupsTaggingApiClient::new_with(
-                    HttpClient::new().expect("failed to create request dispatcher"),
-                    credentials(),
-                    Default::default(),
-                ),
-                Default::default(),
-                Some(filters(tags)),
-            ).map_err(Error::from);
+            let tag_mappings = tag_mappings(tags_client(), Default::default(), Some(filters(tags)))
+                .map_err(Error::from);
 
-            let lambdas = lambdas(
-                LambdaClient::new_with(
-                    HttpClient::new().expect("failed to create request dispatcher"),
-                    credentials(),
-                    Default::default(),
-                ),
-                Default::default(),
-            ).map_err(Error::from);
+            let lambdas = lambdas(lambda_client(), Default::default()).map_err(Error::from);
             let filtered = tag_mappings.join(lambdas).map(|(tags, lambdas)| {
                 let lookup: HashMap<String, FunctionConfiguration> = lambdas
                     .into_iter()
