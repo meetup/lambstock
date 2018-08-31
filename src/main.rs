@@ -13,12 +13,13 @@ extern crate structopt;
 extern crate humansize;
 extern crate rusoto_core;
 extern crate rusoto_credential;
-#[macro_use]
-extern crate clap;
+extern crate tabwriter;
 
 // Std lib
 use std::collections::{BTreeSet, HashMap};
 use std::error::Error as StdError;
+use std::fmt;
+use std::io::{self, Write};
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -26,7 +27,6 @@ use std::time::Duration;
 use futures::future::{self, Future};
 use futures::sync::oneshot::spawn;
 use humansize::{file_size_opts as options, FileSize};
-
 use rusoto_core::request::HttpClient;
 use rusoto_credential::ChainProvider;
 use rusoto_lambda::{
@@ -37,6 +37,7 @@ use rusoto_resourcegroupstaggingapi::{
     ResourceTagMapping, Tag, TagFilter,
 };
 use structopt::StructOpt;
+use tabwriter::TabWriter;
 use tokio::runtime::Runtime;
 
 mod error;
@@ -59,18 +60,43 @@ where
     Ok((s[..pos].parse()?, s[pos + 1..].parse()?))
 }
 
-arg_enum! {
-    #[derive(Debug, PartialEq)]
-    enum Sort {
-        Name,
-        Runtime,
-        CodeSize,
+#[derive(Debug, PartialEq)]
+enum Sort {
+    Name,
+    Runtime,
+    CodeSize,
+}
+
+impl Sort {
+    fn variants() -> &'static [&'static str] {
+        &["name", "runtime", "codesize"]
     }
 }
 
-impl Default for Sort {
-    fn default() -> Self {
-        Sort::Name
+impl FromStr for Sort {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "name" => Ok(Sort::Name),
+            "runtime" => Ok(Sort::Runtime),
+            "codesize" => Ok(Sort::CodeSize),
+            _ => Err("no match"),
+        }
+    }
+}
+
+impl fmt::Display for Sort {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Sort::Name => "name",
+                Sort::Runtime => "runtime",
+                Sort::CodeSize => "codesize",
+            }
+        )
     }
 }
 
@@ -209,14 +235,18 @@ fn render_funcs(funcs: &mut Vec<Func>, sort: Sort) {
             .unwrap_or_default()
             .cmp(&b.runtime().unwrap_or_default()),
     });
+    //io::copy(&mut io::stdin(), &mut tw)
+    let mut writer = TabWriter::new(io::stdout());
     for func in funcs {
-        println!(
-            "{} {} {}",
+        drop(writeln!(
+            &mut writer,
+            "{}\t{}\t{}",
             func.config.function_name.as_ref().unwrap(),
             func.config.runtime.as_ref().unwrap(),
             func.human_size()
-        )
+        ));
     }
+    drop(writer.flush())
 }
 
 fn render_tags(tags: BTreeSet<String>) {
