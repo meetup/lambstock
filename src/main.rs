@@ -235,7 +235,6 @@ fn render_funcs(funcs: &mut Vec<Func>, sort: Sort) {
             .unwrap_or_default()
             .cmp(&b.runtime().unwrap_or_default()),
     });
-    //io::copy(&mut io::stdin(), &mut tw)
     let mut writer = TabWriter::new(io::stdout());
     for func in funcs {
         drop(writeln!(
