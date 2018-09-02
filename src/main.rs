@@ -12,7 +12,6 @@ extern crate failure;
 extern crate structopt;
 extern crate humansize;
 extern crate rusoto_core;
-extern crate rusoto_credential;
 extern crate tabwriter;
 
 // Std lib
@@ -27,8 +26,8 @@ use std::time::Duration;
 use futures::future::{self, Future};
 use futures::sync::oneshot::spawn;
 use humansize::{file_size_opts as options, FileSize};
+use rusoto_core::credential::ChainProvider;
 use rusoto_core::request::HttpClient;
-use rusoto_credential::ChainProvider;
 use rusoto_lambda::{
     FunctionConfiguration, Lambda, LambdaClient, ListFunctionsError, ListFunctionsRequest,
 };
