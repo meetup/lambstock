@@ -1,4 +1,4 @@
-# lambstock [![Build Status](https://travis-ci.org/meetup/lambstock.svg?branch=master)](https://travis-ci.org/meetup/lambstock)
+# lambstock [![Build Status](https://travis-ci.org/meetup/lambstock.svg?branch=master)](https://travis-ci.org/meetup/lambstock) [![Coverage Status](https://coveralls.io/repos/github/meetup/lambstock/badge.svg)](https://coveralls.io/github/meetup/lambstock)
 
 > organizational aws lambda discovery from the command line 🐑 🐑 🐑 🐓🐏 🐕🐑
 
