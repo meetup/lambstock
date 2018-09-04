@@ -3,8 +3,6 @@
 extern crate futures;
 extern crate rusoto_lambda;
 extern crate rusoto_resourcegroupstaggingapi;
-#[macro_use]
-extern crate lazy_static;
 extern crate tokio;
 #[macro_use]
 extern crate failure;
@@ -19,12 +17,13 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error as StdError;
 use std::fmt;
 use std::io::{self, Write};
+use std::process::exit;
 use std::str::FromStr;
 use std::time::Duration;
 
 // Third party
+use failure::{Error as FailureError, Fail};
 use futures::future::{self, Future};
-use futures::sync::oneshot::spawn;
 use humansize::{file_size_opts as options, FileSize};
 use rusoto_core::credential::ChainProvider;
 use rusoto_core::request::HttpClient;
@@ -41,10 +40,6 @@ use tokio::runtime::Runtime;
 
 mod error;
 use error::Error;
-
-lazy_static! {
-    static ref FALLBACK_RUNTIME: Runtime = Runtime::new().expect("failed to create runtime");
-}
 
 fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<StdError>>
 where
@@ -275,8 +270,9 @@ fn tags_client() -> ResourceGroupsTaggingApiClient {
     )
 }
 
-fn main() -> Result<(), Error> {
-    match Options::from_args() {
+fn main() {
+    let mut rt = Runtime::new().expect("failed to initialize runtime");
+    let result = match Options::from_args() {
         Options::Tags => {
             let tags = tag_mappings(tags_client(), Default::default(), None).map_err(Error::from);
             let names = tags.map(|mappings| {
@@ -287,7 +283,7 @@ fn main() -> Result<(), Error> {
                     names
                 })
             });
-            Ok(spawn(names.map(render_tags), &FALLBACK_RUNTIME.executor()).wait()?)
+            rt.block_on(names.map(render_tags))
         }
         Options::List { tags, sort } => {
             let tag_mappings = tag_mappings(tags_client(), Default::default(), Some(filters(tags)))
@@ -309,11 +305,14 @@ fn main() -> Result<(), Error> {
                     result
                 })
             });
-            Ok(spawn(
-                filtered.map(|mut funcs| render_funcs(&mut funcs, sort)),
-                &FALLBACK_RUNTIME.executor(),
-            ).wait()?)
+            rt.block_on(filtered.map(|mut funcs| render_funcs(&mut funcs, sort)))
         }
+    };
+    if let Err(err) = result {
+        for cause in Fail::iter_causes(&err) {
+            eprintln!("{}", cause);
+        }
+        exit(1)
     }
 }
 
