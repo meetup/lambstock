@@ -19,10 +19,11 @@ use std::fmt;
 use std::io::{self, Write};
 use std::process::exit;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
 // Third party
-use failure::{Error as FailureError, Fail};
+use failure::Fail;
 use futures::future::{self, Future};
 use humansize::{file_size_opts as options, FileSize};
 use rusoto_core::credential::ChainProvider;
@@ -153,12 +154,16 @@ fn filters(tags: Vec<(String, String)>) -> Vec<TagFilter> {
     })
 }
 
-fn lambdas(
-    client: LambdaClient,
+fn lambdas<L>(
+    client: Arc<L>,
     marker: Option<String>,
-) -> Box<Future<Item = Vec<FunctionConfiguration>, Error = ListFunctionsError> + Send> {
+) -> Box<Future<Item = Vec<FunctionConfiguration>, Error = ListFunctionsError> + Send>
+where
+    L: Lambda + Send + Sync + 'static,
+{
     Box::new(
         client
+            .clone()
             .list_functions(ListFunctionsRequest {
                 max_items: Some(100),
                 marker,
@@ -180,13 +185,17 @@ fn lambdas(
     )
 }
 
-fn tag_mappings(
-    client: ResourceGroupsTaggingApiClient,
+fn tag_mappings<R>(
+    client: Arc<R>,
     pagination_token: Option<String>,
     tag_filters: Option<Vec<TagFilter>>,
-) -> Box<Future<Item = Vec<ResourceTagMapping>, Error = GetResourcesError> + Send> {
+) -> Box<Future<Item = Vec<ResourceTagMapping>, Error = GetResourcesError> + Send>
+where
+    R: ResourceGroupsTaggingApi + Send + Sync + 'static,
+{
     Box::new(
         client
+            .clone()
             .get_resources(GetResourcesInput {
                 resource_type_filters: Some(vec!["lambda:function".into()]),
                 resources_per_page: Some(50),
@@ -274,7 +283,8 @@ fn main() {
     let mut rt = Runtime::new().expect("failed to initialize runtime");
     let result = match Options::from_args() {
         Options::Tags => {
-            let tags = tag_mappings(tags_client(), Default::default(), None).map_err(Error::from);
+            let tags = tag_mappings(Arc::new(tags_client()), Default::default(), None)
+                .map_err(Error::from);
             let names = tags.map(|mappings| {
                 mappings.iter().fold(BTreeSet::new(), |mut names, mapping| {
                     for tag in mapping.tags.clone().unwrap_or_default() {
@@ -286,10 +296,14 @@ fn main() {
             rt.block_on(names.map(render_tags))
         }
         Options::List { tags, sort } => {
-            let tag_mappings = tag_mappings(tags_client(), Default::default(), Some(filters(tags)))
-                .map_err(Error::from);
+            let tag_mappings = tag_mappings(
+                Arc::new(tags_client()),
+                Default::default(),
+                Some(filters(tags)),
+            ).map_err(Error::from);
 
-            let lambdas = lambdas(lambda_client(), Default::default()).map_err(Error::from);
+            let lambdas =
+                lambdas(Arc::new(lambda_client()), Default::default()).map_err(Error::from);
             let filtered = tag_mappings.join(lambdas).map(|(tags, lambdas)| {
                 let lookup: HashMap<String, FunctionConfiguration> = lambdas
                     .into_iter()
