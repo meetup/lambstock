@@ -2,29 +2,41 @@
 language: rust
 sudo: required
 
-cache:
-  cargo: true
-  apt: true
+# only build pushes to master
+# prs are build separately
+# https://docs.travis-ci.com/user/pull-requests/#how-pull-requests-are-built
+branches:
+  only:
+  - master
 
-env:
-  global:
-    - CRATE_NAME=lambstock
-    - ARCH=x86_64
-    - OS=Linux
+# Cache `cargo install`ed tools, but don't cache the project's `target`
+# directory (which ends up over-caching and filling all disk space!)
+cache:
+  directories:
+    - /home/travis/.cargo
+
+# env:
+#   global:
+#     - CRATE_NAME=lambstock
+#     - ARCH=x86_64
+#     - OS=Linux
 
 matrix:
   include:
 
   # tests pass
-  - script:
-    # --locked => Require Cargo.lock is up to date
+  - name: Tests
+    env: RUST_BACKTRACE=1
+    rust: nightly
+    script:
     - cargo test --locked
     - rustup component add rustfmt-preview
+    - cargo fmt --version
     - cargo fmt --all -- --check
-    env: RUST_BACKTRACE=1
 
-  # dist linux binary
-  - env: TARGET=x86_64-unknown-linux-musl DEPLOY=1
+  - name: Linux Binary
+    env: TARGET=x86_64-unknown-linux-musl
+    rust: nightly
     before_script:
       - rustup target add $TARGET
       - curl https://www.openssl.org/source/openssl-1.0.2l.tar.gz | tar xzf -
@@ -34,10 +46,15 @@ matrix:
         make install)
       - export OPENSSL_DIR=$HOME/openssl-musl
     script: cargo build --release --target $TARGET --locked
+    addons:
+      apt:
+        packages:
+          - musl-tools
 
-  # dist OSX binary
-  - os: osx
-    env: MACOSX_DEPLOYMENT_TARGET=10.7 TARGET=x86_64-apple-darwin OS=Darwin DEPLOY=1
+  - name: macOS Binary
+    env: MACOSX_DEPLOYMENT_TARGET=10.7 TARGET=x86_64-apple-darwin
+    os: osx
+    rust: nightly
     script: cargo build --release --target $TARGET --locked
     install: true
 
@@ -49,24 +66,26 @@ addons:
     - libssl-dev
 
 install: |
-  if [[ "$TRAVIS_RUST_VERSION" == stable ]] && [[ $(cargo tarpaulin --version) != *0.6.2 ]]; then
+  if [[ "$TRAVIS_RUST_VERSION" == nightly ]] then
     `RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install  --force --version 0.6.2  cargo-tarpaulin`
   fi
 after_success:
   # report coverage to coveralls
   # see https://github.com/xd009642/tarpaulin for more information
+  # report coverage to coveralls
+  # see https://github.com/xd009642/tarpaulin for more information
   - '[ $TRAVIS_EVENT_TYPE != "cron" ] &&
-    [ $TRAVIS_RUST_VERSION = stable ] &&
+    [ $TRAVIS_RUST_VERSION = nightly ] &&
     [ $TRAVIS_BRANCH = master ] &&
     [ $TRAVIS_PULL_REQUEST = false ] &&
     cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID || true'
 
 before_deploy:
-- name="$CRATE_NAME-$TRAVIS_TAG-$OS-$ARCH"
+- name="lambstock-$TRAVIS_TAG-$OS-$ARCH"
 - src=$(pwd)
 - mkdir $name
-- strip target/$TARGET/release/$CRATE_NAME
-- cp target/$TARGET/release/$CRATE_NAME $name/
+- strip target/$TARGET/release/lambstock
+- cp target/$TARGET/release/lambstock $name/
 - cd $name
 - tar czvf $src/$name.tar.gz *
 - cd $src

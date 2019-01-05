@@ -300,7 +300,8 @@ fn main() {
                 Arc::new(tags_client()),
                 Default::default(),
                 Some(filters(tags)),
-            ).map_err(Error::from);
+            )
+            .map_err(Error::from);
 
             let lambdas =
                 lambdas(Arc::new(lambda_client()), Default::default()).map_err(Error::from);
@@ -343,7 +344,8 @@ mod tests {
                     ..Default::default()
                 },
                 ..Default::default()
-            }.human_size()
+            }
+            .human_size()
         )
     }
     #[test]
