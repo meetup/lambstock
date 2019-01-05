@@ -1,5 +1,6 @@
 # lifted release strategy from https://raw.githubusercontent.com/rustwasm/wasm-pack/master/.travis.yml
 language: rust
+# required for codecov tool
 sudo: required
 
 # only build pushes to master
@@ -66,19 +67,19 @@ addons:
     - libssl-dev
 
 install: |
-  if [[ "$TRAVIS_RUST_VERSION" == nightly ]] then
-    `RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install  --force --version 0.6.2  cargo-tarpaulin`
+  if [[ "$TRAVIS_RUST_VERSION" == nightly ]]; then
+    RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin -f
   fi
+
 after_success:
   # report coverage to coveralls
   # see https://github.com/xd009642/tarpaulin for more information
   # report coverage to coveralls
   # see https://github.com/xd009642/tarpaulin for more information
-  - '[ $TRAVIS_EVENT_TYPE != "cron" ] &&
-    [ $TRAVIS_RUST_VERSION = nightly ] &&
-    [ $TRAVIS_BRANCH = master ] &&
-    [ $TRAVIS_PULL_REQUEST = false ] &&
-    cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID || true'
+  - '[ $TRAVIS_RUST_VERSION = nightly ] &&
+     [ $TRAVIS_BRANCH = master ] &&
+     [ $TRAVIS_PULL_REQUEST = false ] &&
+     cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID || true'
 
 before_deploy:
 - name="lambstock-$TRAVIS_TAG-$OS-$ARCH"
