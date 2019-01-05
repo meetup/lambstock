@@ -10,6 +10,7 @@ keywords = ["aws", "lambda", "serverless"]
 license = "MIT"
 categories = ["command-line-utilities"]
 readme = "README.md"
+edition = "2018"
 
 [dependencies]
 clap = "2.32"
