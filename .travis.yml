@@ -30,7 +30,7 @@ matrix:
     rust: nightly
     script:
     - cargo test --locked
-    - rustup component add rustfmt-preview
+    - rustup component add rustfmt
     - cargo fmt --version
     - cargo fmt --all -- --check
 
