@@ -3,12 +3,13 @@ language: rust
 # required for codecov tool
 sudo: required
 
-# only build pushes to master
+# only build pushes to master and version tags
 # prs are build separately
 # https://docs.travis-ci.com/user/pull-requests/#how-pull-requests-are-built
 branches:
   only:
   - master
+  - /v^\d+.\d+.\d+$/
 
 # Cache `cargo install`ed tools, but don't cache the project's `target`
 # directory (which ends up over-caching and filling all disk space!)
