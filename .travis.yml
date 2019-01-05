@@ -16,11 +16,26 @@ cache:
   directories:
     - /home/travis/.cargo
 
-# env:
-#   global:
-#     - CRATE_NAME=lambstock
-#     - ARCH=x86_64
-#     - OS=Linux
+# yaml ref for deploying release binary to github
+DEPLOY_TO_GITHUB: &DEPLOY_TO_GITHUB
+  before_deploy:
+    - name="lambstock-$TRAVIS_TAG-$OS-$ARCH"
+    - src=$(pwd)
+    - mkdir $name
+    - strip target/$TARGET/release/lambstock
+    - cp target/$TARGET/release/lambstock $name/
+    - cd $name
+    - tar czvf $src/$name.tar.gz *
+    - cd $src
+    - rm -rf $name
+  deploy:
+    provider: releases
+    api_key: $GH_TOKEN
+    file: lambstock-$TRAVIS_TAG-$OS-$ARCH.tar.gz
+    skip_cleanup: true
+    on:
+      branch: master
+      tags: true
 
 matrix:
   include:
@@ -35,7 +50,7 @@ matrix:
     - cargo fmt --all -- --check
 
   - name: Linux Binary
-    env: TARGET=x86_64-unknown-linux-musl
+    env: TARGET=x86_64-unknown-linux-musl OS=Linux ARCH=x86_64
     rust: stable
     before_script:
       - rustup target add $TARGET
@@ -52,7 +67,7 @@ matrix:
           - musl-tools
 
   - name: macOS Binary
-    env: MACOSX_DEPLOYMENT_TARGET=10.7 TARGET=x86_64-apple-darwin
+    env: MACOSX_DEPLOYMENT_TARGET=10.7 TARGET=x86_64-apple-darwin OS=Darwin ARCH=x86_64
     os: osx
     rust: stable
     script: cargo build --release --target $TARGET --locked
@@ -66,37 +81,14 @@ addons:
     - libssl-dev
 
 install: |
-  if [[ "$TRAVIS_RUST_VERSION" == nightly ]]; then
+  if [[ "$TRAVIS_RUST_VERSION" == nightly ] && [ $TRAVIS_BRANCH = master ]]; then
     RUSTFLAGS="--cfg procmacro2_semver_exempt" cargo install cargo-tarpaulin -f
   fi
 
 after_success:
   # report coverage to coveralls
   # see https://github.com/xd009642/tarpaulin for more information
-  # report coverage to coveralls
-  # see https://github.com/xd009642/tarpaulin for more information
   - '[ $TRAVIS_RUST_VERSION = nightly ] &&
      [ $TRAVIS_BRANCH = master ] &&
      [ $TRAVIS_PULL_REQUEST = false ] &&
      cargo tarpaulin --ciserver travis-ci --coveralls $TRAVIS_JOB_ID || true'
-
-before_deploy:
-- name="lambstock-$TRAVIS_TAG-$OS-$ARCH"
-- src=$(pwd)
-- mkdir $name
-- strip target/$TARGET/release/lambstock
-- cp target/$TARGET/release/lambstock $name/
-- cd $name
-- tar czvf $src/$name.tar.gz *
-- cd $src
-- rm -rf $name
-
-# deploy:
-#   provider: releases
-#   file_glob: true
-#   file: $CRATE_NAME-$TRAVIS_TAG-$OS-$ARCH.tar.gz
-#   api_key: $GH_TOKEN
-#   skip_cleanup: true
-#   on:
-#     condition: $TRAVIS_RUST_VERSION = stable && $DEPLOY = 1
-#     tags: true
