@@ -38,11 +38,10 @@ DEPLOY_TO_GITHUB: &DEPLOY_TO_GITHUB
       branch: master
       tags: true
 
-jobs:
+matrics:
   include:
 
-  - stage: Test
-    name: Unit Tests
+  - name: Unit Tests
     env: RUST_BACKTRACE=1
     rust: nightly
     script:
@@ -51,8 +50,7 @@ jobs:
     - cargo fmt --version
     - cargo fmt --all -- --check
 
-  - stage: Package
-    name: Linux Binary
+  - name: Linux Binary
     env: TARGET=x86_64-unknown-linux-musl OS=Linux ARCH=x86_64
     rust: stable
     before_script:
