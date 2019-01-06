@@ -10,15 +10,16 @@ keywords = ["aws", "lambda", "serverless"]
 license = "MIT"
 categories = ["command-line-utilities"]
 readme = "README.md"
+edition = "2018"
 
 [dependencies]
 clap = "2.32"
 failure = "0.1"
 futures = "0.1"
 humansize  = "1.1"
-rusoto_resourcegroupstaggingapi = "0.33"
-rusoto_lambda = "0.33"
+rusoto_resourcegroupstaggingapi = "0.36"
+rusoto_lambda = "0.36"
 structopt = "0.2"
 tokio = "0.1"
-rusoto_core = "0.33"
+rusoto_core = "0.36"
 tabwriter = "1.1"

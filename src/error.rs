@@ -1,3 +1,4 @@
+use failure::Fail;
 use rusoto_lambda::ListFunctionsError;
 use rusoto_resourcegroupstaggingapi::GetResourcesError;
 

@@ -1,33 +1,9 @@
 //! AWS Lambda stock management
 
-extern crate futures;
-extern crate rusoto_lambda;
-extern crate rusoto_resourcegroupstaggingapi;
-extern crate tokio;
-#[macro_use]
-extern crate failure;
-#[macro_use]
-extern crate structopt;
-extern crate humansize;
-extern crate rusoto_core;
-extern crate tabwriter;
-
-// Std lib
-use std::collections::{BTreeSet, HashMap};
-use std::error::Error as StdError;
-use std::fmt;
-use std::io::{self, Write};
-use std::process::exit;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::time::Duration;
-
-// Third party
 use failure::Fail;
 use futures::future::{self, Future};
 use humansize::{file_size_opts as options, FileSize};
-use rusoto_core::credential::ChainProvider;
-use rusoto_core::request::HttpClient;
+use rusoto_core::{credential::ChainProvider, request::HttpClient};
 use rusoto_lambda::{
     FunctionConfiguration, Lambda, LambdaClient, ListFunctionsError, ListFunctionsRequest,
 };
@@ -35,12 +11,22 @@ use rusoto_resourcegroupstaggingapi::{
     GetResourcesError, GetResourcesInput, ResourceGroupsTaggingApi, ResourceGroupsTaggingApiClient,
     ResourceTagMapping, Tag, TagFilter,
 };
+use std::{
+    collections::{BTreeSet, HashMap},
+    error::Error as StdError,
+    fmt,
+    io::{self, Write},
+    process::exit,
+    str::FromStr,
+    sync::Arc,
+    time::Duration,
+};
 use structopt::StructOpt;
 use tabwriter::TabWriter;
 use tokio::runtime::Runtime;
 
 mod error;
-use error::Error;
+use crate::error::Error;
 
 fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<StdError>>
 where
@@ -82,7 +68,10 @@ impl FromStr for Sort {
 }
 
 impl fmt::Display for Sort {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(
+        &self,
+        f: &mut fmt::Formatter,
+    ) -> fmt::Result {
         write!(
             f,
             "{}",
@@ -140,7 +129,7 @@ impl Func {
     }
 
     fn code_size(&self) -> Option<i64> {
-        self.config.code_size.clone()
+        self.config.code_size
     }
 }
 
@@ -223,7 +212,10 @@ where
     )
 }
 
-fn render_funcs(funcs: &mut Vec<Func>, sort: Sort) {
+fn render_funcs(
+    funcs: &mut Vec<Func>,
+    sort: Sort,
+) {
     funcs.sort_unstable_by(|a, b| match sort {
         Sort::Name => a
             .name()
