@@ -38,7 +38,7 @@ DEPLOY_TO_GITHUB: &DEPLOY_TO_GITHUB
       branch: master
       tags: true
 
-matrics:
+matrix:
   include:
 
   - name: Unit Tests
