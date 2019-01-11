@@ -13,6 +13,17 @@ introducing different kinds of application management problems, discovery proble
 Lambstock is a discovery tool for AWS lambda to that enables you to explore
 your lambda stock of applications from the command line
 
+# 📦 install
+
+## Github releases
+
+Prebuilt binaries for osx and linux are available for download directly from [Github Releases](https://github.com/meetup/lev/releases)
+
+```bash
+$ curl -L \
+ "https://github.com/meetup/lambstock/releases/download/v0.0.0/lambstock-v0.0.0-$(uname -s)-$(uname -m).tar.gz" \
+  | tar -xz
+```
 
 ## 👩‍🏭 development
 
