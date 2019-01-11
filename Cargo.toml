@@ -1,6 +1,6 @@
 [package]
 name = "lambstock"
-version = "0.1.0"
+version = "0.0.0"
 authors = ["softprops <d.tangren@gmail.com>"]
 description = "A command line interface for browsing AWS lambdas"
 documentation = "https://github.com/meetup/lambstock"
