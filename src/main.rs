@@ -2,6 +2,7 @@
 
 use failure::Fail;
 use futures::future::{self, Future};
+use futures_backoff::Strategy;
 use humansize::{file_size_opts as options, FileSize};
 use rusoto_core::{credential::ChainProvider, request::HttpClient};
 use rusoto_lambda::{
@@ -150,14 +151,25 @@ fn lambdas<L>(
 where
     L: Lambda + Send + Sync + 'static,
 {
+    let client_inner = client.clone();
     Box::new(
-        client
-            .clone()
-            .list_functions(ListFunctionsRequest {
-                max_items: Some(100),
-                marker,
-                ..Default::default()
-            })
+        backoff()
+            .retry_if(
+                move || {
+                    client_inner.list_functions(ListFunctionsRequest {
+                        max_items: Some(100),
+                        marker: marker.clone(),
+                        ..ListFunctionsRequest::default()
+                    })
+                },
+                |err: &ListFunctionsError| {
+                    log::debug!("lambda api error {}", err);
+                    match err {
+                        ListFunctionsError::TooManyRequests(_) => true,
+                        _ => false,
+                    }
+                },
+            )
             .and_then(move |result| {
                 if let Some(marker) = result.next_marker.clone().filter(|s| !s.is_empty()) {
                     return future::Either::A(lambdas(client, Some(marker)).map(|next| {
@@ -182,16 +194,28 @@ fn tag_mappings<R>(
 where
     R: ResourceGroupsTaggingApi + Send + Sync + 'static,
 {
+    let client_inner = client.clone();
+    let tag_filters_inner = tag_filters.clone();
     Box::new(
-        client
-            .clone()
-            .get_resources(GetResourcesInput {
-                resource_type_filters: Some(vec!["lambda:function".into()]),
-                resources_per_page: Some(50),
-                pagination_token,
-                tag_filters: tag_filters.clone(),
-                ..Default::default()
-            })
+        backoff()
+            .retry_if(
+                move || {
+                    client_inner.get_resources(GetResourcesInput {
+                        resource_type_filters: Some(vec!["lambda:function".into()]),
+                        resources_per_page: Some(50),
+                        pagination_token: pagination_token.clone(),
+                        tag_filters: tag_filters_inner.clone(),
+                        ..GetResourcesInput::default()
+                    })
+                },
+                |err: &GetResourcesError| {
+                    log::debug!("tagging api error {}", err);
+                    match err {
+                        GetResourcesError::InvalidParameter(_) => true,
+                        _ => false,
+                    }
+                },
+            )
             .and_then(move |result| {
                 if let Some(token) = result.pagination_token.clone().filter(|s| !s.is_empty()) {
                     return future::Either::A(tag_mappings(client, Some(token), tag_filters).map(
@@ -263,6 +287,12 @@ fn lambda_client() -> LambdaClient {
     )
 }
 
+fn backoff() -> Strategy {
+    Strategy::exponential(Duration::from_millis(100))
+        .with_max_retries(15)
+        .with_jitter(true)
+}
+
 fn tags_client() -> ResourceGroupsTaggingApiClient {
     ResourceGroupsTaggingApiClient::new_with(
         HttpClient::new().expect("failed to create request dispatcher"),
@@ -272,6 +302,7 @@ fn tags_client() -> ResourceGroupsTaggingApiClient {
 }
 
 fn main() {
+    env_logger::init();
     let mut rt = Runtime::new().expect("failed to initialize runtime");
     let result = match Options::from_args() {
         Options::Tags => {
