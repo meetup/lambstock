@@ -25,7 +25,61 @@ $ curl -L \
   | tar -xz
 ```
 
-## 👩‍🏭 development
+# 🤸 usage
+
+This tool communicates with AWS Lambda and Resource tagging API's using the standard AWS credential chain
+to authenticate requests. You may wish to export an `AWS_PROFILE` env variable to query your lambdas from different accounts.
+
+The main usecase for this cli delving into your account to discover Lambdas of interest.
+
+```sh
+USAGE:
+    lambstock <SUBCOMMAND>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+SUBCOMMANDS:
+    help    Prints this message or the help of the given subcommand(s)
+    list    List lambdas
+    tags    List lambdas tags
+```
+
+## tags
+
+The approach this cli takes to to leverage a built-in feature of AWS for adding tags to Lambdas. A common case for this is
+to tag a Lambda with a team name, or product, or some other arbitrary annotation. To see a list of tags run
+
+```sh
+$ lambstock tags
+# ... list of tags associated with Lambda resources under your account
+```
+
+## list
+
+You can use the `list` subcommand to discover Lambdas either as a raw list of filtered by tag
+
+```sh
+# all the lambdas
+$ lambstock list
+```
+
+```sh
+# all of my-awesome-teams lambdas
+$ lambstock list --tag team=my-awesome-team
+```
+
+### sorting
+
+You can also sort results based on `name`, `codesize` or `runtime`
+
+```sh
+# all of my-awesome-teams lambdas
+$ lambstock list --tag team=my-awesome-team --sort codesize
+```
+
+# 👩‍🏭 development
 
 This is a [rustlang](https://www.rust-lang.org/en-US/) application.
 Go grab yourself a copy with [rustup](https://rustup.rs/).
