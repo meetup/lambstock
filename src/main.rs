@@ -4,7 +4,7 @@ use failure::Fail;
 use futures::future::{self, Future};
 use futures_backoff::Strategy;
 use humansize::{file_size_opts as options, FileSize};
-use rusoto_core::{credential::ChainProvider, request::HttpClient};
+use rusoto_core::{credential::ChainProvider, request::HttpClient, RusotoError};
 use rusoto_lambda::{
     FunctionConfiguration, Lambda, LambdaClient, ListFunctionsError, ListFunctionsRequest,
 };
@@ -19,7 +19,6 @@ use std::{
     io::{self, Write},
     process::exit,
     str::FromStr,
-    sync::Arc,
     time::Duration,
 };
 use structopt::StructOpt;
@@ -144,12 +143,10 @@ fn filters(tags: Vec<(String, String)>) -> Vec<TagFilter> {
     })
 }
 
-fn lambdas<L>(
-    client: Arc<L>,
+fn lambdas(
+    client: LambdaClient,
     marker: Option<String>,
-) -> Box<Future<Item = Vec<FunctionConfiguration>, Error = ListFunctionsError> + Send>
-where
-    L: Lambda + Send + Sync + 'static,
+) -> Box<Future<Item = Vec<FunctionConfiguration>, Error = RusotoError<ListFunctionsError>> + Send>
 {
     let client_inner = client.clone();
     Box::new(
@@ -162,10 +159,10 @@ where
                         ..ListFunctionsRequest::default()
                     })
                 },
-                |err: &ListFunctionsError| {
+                |err: &RusotoError<ListFunctionsError>| {
                     log::debug!("lambda api error {}", err);
                     match err {
-                        ListFunctionsError::TooManyRequests(_) => true,
+                        RusotoError::Service(ListFunctionsError::TooManyRequests(_)) => true,
                         _ => false,
                     }
                 },
@@ -186,14 +183,11 @@ where
     )
 }
 
-fn tag_mappings<R>(
-    client: Arc<R>,
+fn tag_mappings(
+    client: ResourceGroupsTaggingApiClient,
     pagination_token: Option<String>,
     tag_filters: Option<Vec<TagFilter>>,
-) -> Box<Future<Item = Vec<ResourceTagMapping>, Error = GetResourcesError> + Send>
-where
-    R: ResourceGroupsTaggingApi + Send + Sync + 'static,
-{
+) -> Box<Future<Item = Vec<ResourceTagMapping>, Error = RusotoError<GetResourcesError>> + Send> {
     let client_inner = client.clone();
     let tag_filters_inner = tag_filters.clone();
     Box::new(
@@ -208,10 +202,10 @@ where
                         ..GetResourcesInput::default()
                     })
                 },
-                |err: &GetResourcesError| {
+                |err: &RusotoError<GetResourcesError>| {
                     log::debug!("tagging api error {}", err);
                     match err {
-                        GetResourcesError::InvalidParameter(_) => true,
+                        RusotoError::Service(GetResourcesError::InvalidParameter(_)) => true,
                         _ => false,
                     }
                 },
@@ -306,7 +300,7 @@ fn main() {
     let mut rt = Runtime::new().expect("failed to initialize runtime");
     let result = match Options::from_args() {
         Options::Tags => {
-            let tags = tag_mappings(Arc::new(tags_client()), Default::default(), None)
+            let tags = tag_mappings(tags_client(), Default::default(), None)
                 .map_err(Error::from);
             let names = tags.map(|mappings| {
                 mappings.iter().fold(BTreeSet::new(), |mut names, mapping| {
@@ -319,15 +313,10 @@ fn main() {
             rt.block_on(names.map(render_tags))
         }
         Options::List { tags, sort } => {
-            let tag_mappings = tag_mappings(
-                Arc::new(tags_client()),
-                Default::default(),
-                Some(filters(tags)),
-            )
-            .map_err(Error::from);
+            let tag_mappings = tag_mappings(tags_client(), Default::default(), Some(filters(tags)))
+                .map_err(Error::from);
 
-            let lambdas =
-                lambdas(Arc::new(lambda_client()), Default::default()).map_err(Error::from);
+            let lambdas = lambdas(lambda_client(), Default::default()).map_err(Error::from);
             let filtered = tag_mappings.join(lambdas).map(|(tags, lambdas)| {
                 let lookup: HashMap<String, FunctionConfiguration> = lambdas
                     .into_iter()
