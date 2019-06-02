@@ -300,8 +300,7 @@ fn main() {
     let mut rt = Runtime::new().expect("failed to initialize runtime");
     let result = match Options::from_args() {
         Options::Tags => {
-            let tags = tag_mappings(tags_client(), Default::default(), None)
-                .map_err(Error::from);
+            let tags = tag_mappings(tags_client(), Default::default(), None).map_err(Error::from);
             let names = tags.map(|mappings| {
                 mappings.iter().fold(BTreeSet::new(), |mut names, mapping| {
                     for tag in mapping.tags.clone().unwrap_or_default() {
